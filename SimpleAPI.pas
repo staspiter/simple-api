@@ -1,10 +1,10 @@
-unit SimpleHTTPAPI;
+unit SimpleAPI;
 
 interface
 
 uses
 
-  System.Classes, System.SysUtils,
+  System.Classes, System.SysUtils, JsonDataObjects,
 
   // FireDAC
 
@@ -22,14 +22,16 @@ type
 
   TUserObject = class abstract
   private
+    FFDConnection: TFDConnection;
     FUserId: string;
   public
     property UserId: string read FUserId;
+    property FDConnection: TFDConnection read FFDConnection;
 
-    constructor Create(const AUserId: string; FDConnection: TFDConnection);
+    constructor Create(const AUserId: string; AFDConnection: TFDConnection); virtual;
   end;
 
-  TSimpleHTTPAPI = class
+  TSimpleAPI = class
   private
     FHTTPServer: TIdHTTPServer;
     FFDManager: TFDManager;
@@ -39,9 +41,7 @@ type
 
     function GetPort: Word;
     procedure SetPort(const Value: Word);
-
   public
-
     property UserObjectClass: TUserObjectClass read FUserObjectClass write FUserObjectClass;
     property Port: Word read GetPort write SetPort;
 
@@ -52,7 +52,7 @@ type
 implementation
 
 uses
-  SimpleHTTPAPI.Utils, SimpleHTTPAPI.Model;
+  SimpleAPI.Utils, SimpleAPI.Controller;
 
 type
 
@@ -61,9 +61,9 @@ type
     procedure DecodeAndSetParams(const AValue: string); override;
   end;
 
-{ TSimpleHTTPAPI }
+{ TSimpleAPI }
 
-constructor TSimpleHTTPAPI.Create(APort: Word; DBConnectionStrings: TStringList);
+constructor TSimpleAPI.Create(APort: Word; DBConnectionStrings: TStringList);
 var
   c: TFDConnection;
 begin
@@ -108,7 +108,7 @@ begin
   FHTTPServer.Active := true;
 end;
 
-procedure TSimpleHTTPAPI.DisposeOf;
+procedure TSimpleAPI.DisposeOf;
 begin
   FHTTPServer.Active := false;
   FHTTPServer.DisposeOf;
@@ -119,21 +119,22 @@ begin
   inherited;
 end;
 
-function TSimpleHTTPAPI.GetPort: Word;
+function TSimpleAPI.GetPort: Word;
 begin
   Result := FHTTPServer.DefaultPort;
 end;
 
-procedure TSimpleHTTPAPI.SetPort(const Value: Word);
+procedure TSimpleAPI.SetPort(const Value: Word);
 begin
   FHTTPServer.DefaultPort := Value;
 end;
 
-procedure TSimpleHTTPAPI.CommandGet(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo;
+procedure TSimpleAPI.CommandGet(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo;
   AResponseInfo: TIdHTTPResponseInfo);
 var
   FDConnection: TFDConnection;
   FDQuery: TFDQuery;
+  json: TJsonObject;
 begin
   // UTF-8 UrlEncoded parameters fix
 
@@ -155,13 +156,20 @@ begin
   FDConnection.StartTransaction;
 
   try
-    TModel.Execute(ARequestInfo, AResponseInfo, FDConnection, FDQuery, FUserObjectClass);
+    TController.Execute(ARequestInfo, AResponseInfo, FDConnection, FDQuery, FUserObjectClass);
 
     FDConnection.Commit;
   except
-    FDConnection.Rollback;
+    on e: Exception do
+    begin
+      FDConnection.Rollback;
 
-    AResponseInfo.ContentText := '{"error":"server_error"}';
+      json := TJsonObject.Create;
+      json.S['error'] := 'server_error';
+      json.S['message'] := e.Message;
+      AResponseInfo.ContentText := json.ToJSON;
+      json.DisposeOf;
+    end;
   end;
 
   // Free FDConnection and FDQuery
@@ -180,9 +188,10 @@ end;
 
 { TUserObject }
 
-constructor TUserObject.Create(const AUserId: string; FDConnection: TFDConnection);
+constructor TUserObject.Create(const AUserId: string; AFDConnection: TFDConnection);
 begin
   FUserId := AUserId;
+  FFDConnection := AFDConnection;
 end;
 
 end.

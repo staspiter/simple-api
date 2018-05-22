@@ -1,4 +1,4 @@
-unit SimpleHTTPAPI.Model.Accounts;
+unit SimpleAPI.Controller.Accounts;
 
 interface
 
@@ -9,12 +9,12 @@ uses
 
   IdCustomHTTPServer,
 
-  SimpleHTTPAPI, SimpleHTTPAPI.Model;
+  SimpleAPI, SimpleAPI.Controller;
 
 type
 
-  [Model('accounts')]
-  TAccountsModel = class(TModel)
+  [Controller('accounts')]
+  TAccountsController = class(TController)
   private
     class function HashPassword(const UserId, PassHashRequest: string): string;
 
@@ -35,11 +35,11 @@ type
 implementation
 
 uses
-  SimpleHTTPAPI.Utils;
+  SimpleAPI.Utils;
 
-{ TAccountsModel }
+{ TAccountsController }
 
-procedure TAccountsModel.GetToken;
+procedure TAccountsController.GetToken;
 var
   UserId, Name, PassHashRequest, PassHash, NewToken: string;
 begin
@@ -84,7 +84,7 @@ begin
   Output.ContentText := Format('{"token":"%s","userId":"%s","name":"%s"}', [NewToken, UserId, Name]);
 end;
 
-procedure TAccountsModel.Create;
+procedure TAccountsController.Create;
 var
   UserId, PassHashRequest, PassHash: string;
 begin
@@ -118,18 +118,18 @@ begin
   Output.ContentText := '{"answer":"user_added"}';
 end;
 
-class function TAccountsModel.HashPassword(const UserId, PassHashRequest: string): string;
+class function TAccountsController.HashPassword(const UserId, PassHashRequest: string): string;
 begin
   result := THashSHA2.GetHashString(UserId + PassHashRequest {SHA256 of real password} + 'bf3jH39k');
 end;
 
-class function TAccountsModel.GetUserObjectByUserId(const UserId: string; FDConnection: TFDConnection;
+class function TAccountsController.GetUserObjectByUserId(const UserId: string; FDConnection: TFDConnection;
   UserObjectClass: TUserObjectClass): TUserObject;
 begin
   Result := UserObjectClass.Create(UserId, FDConnection);
 end;
 
-class function TAccountsModel.GetUserObjectByToken(const Token: string; FDConnection: TFDConnection;
+class function TAccountsController.GetUserObjectByToken(const Token: string; FDConnection: TFDConnection;
   UserObjectClass: TUserObjectClass): TUserObject;
 var
   q: TFDQuery;
@@ -152,6 +152,6 @@ end;
 
 initialization
 
-TAccountsModel.Register;
+TAccountsController.Register;
 
 end.

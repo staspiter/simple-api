@@ -1,4 +1,4 @@
-unit SimpleHTTPAPI.Utils;
+unit SimpleAPI.Utils;
 
 interface
 

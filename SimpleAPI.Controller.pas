@@ -1,4 +1,4 @@
-unit SimpleHTTPAPI.Model;
+unit SimpleAPI.Controller;
 
 interface
 
@@ -9,15 +9,15 @@ uses
 
   IdCustomHTTPServer,
 
-  SimpleHTTPAPI;
+  SimpleAPI;
 
 type
 
-  // Attributes used for model descriptions
+  // Attributes used for controller description
 
   TCustomAttributeClass = class of TCustomAttribute;
 
-  ModelAttribute = class(TCustomAttribute)
+  ControllerAttribute = class(TCustomAttribute)
   public
     FName: string;
     constructor Create(const AName: string);
@@ -32,19 +32,19 @@ type
 
   PublicAccessAttribute = class(TCustomAttribute);
 
-  // Base TModel class
+  // Base TController class
 
   TMethodData = record
     RttiMethod: TRttiMethod;
     PublicAccess: boolean;
   end;
 
-  TModelClass = class of TModel;
+  TControllerClass = class of TController;
 
-  TModel = class abstract
+  TController = class abstract
   private class var
     FRTTIContext: TRttiContext;
-    FModels: TDictionary<string, TModel>;
+    FControllers: TDictionary<string, TController>;
 
   private
     FActions: TDictionary<string, TMethodData>;
@@ -78,11 +78,11 @@ type
 implementation
 
 uses
-  SimpleHTTPAPI.Utils, SimpleHTTPAPI.Model.Accounts;
+  SimpleAPI.Utils, SimpleAPI.Controller.Accounts;
 
-{ ModelAttribute }
+{ ControllerAttribute }
 
-constructor ModelAttribute.Create(const AName: string);
+constructor ControllerAttribute.Create(const AName: string);
 begin
   FName := AName;
 end;
@@ -95,46 +95,46 @@ begin
   FMethod := AMethod;
 end;
 
-{ TModel }
+{ TController }
 
-class procedure TModel.Init;
+class procedure TController.Init;
 begin
-  if FModels <> nil then
+  if FControllers <> nil then
     exit;
 
   FRTTIContext := TRttiContext.Create;
-  FModels := TDictionary<string, TModel>.Create;
+  FControllers := TDictionary<string, TController>.Create;
 end;
 
-class destructor TModel.Destroy;
+class destructor TController.Destroy;
 var
-  m: TModel;
+  m: TController;
 begin
-  for m in FModels.Values.ToArray do
+  for m in FControllers.Values.ToArray do
     m.DisposeOf;
-  FModels.DisposeOf;
+  FControllers.DisposeOf;
 
   FRTTIContext.Free;
 end;
 
-class procedure TModel.Register;
+class procedure TController.Register;
 var
   Attrs: TArray<TCustomAttribute>;
 begin
-  TModel.Init;
+  TController.Init;
 
   Attrs := FRTTIContext.GetType(Self).GetAttributes;
-  if (Length(Attrs) > 0) and (Attrs[0] is ModelAttribute) then
-    FModels.Add(LowerCase(ModelAttribute(Attrs[0]).FName), Self.Create);
+  if (Length(Attrs) > 0) and (Attrs[0] is ControllerAttribute) then
+    FControllers.Add(LowerCase(ControllerAttribute(Attrs[0]).FName), Self.Create);
 end;
 
-class procedure TModel.Execute(Input: TIdHTTPRequestInfo; Output: TIdHTTPResponseInfo;
+class procedure TController.Execute(Input: TIdHTTPRequestInfo; Output: TIdHTTPResponseInfo;
   FDConnection: TFDConnection; FDQuery: TFDQuery; UserObjectClass: TUserObjectClass);
 var
   Uri: string;
   SplittedUri: TArray<string>;
-  Method, Model, Action: string;
-  m, m1: TModel;
+  Method, Controller, Action: string;
+  m, m1: TController;
   ActionId: string;
   md: TMethodData;
 begin
@@ -146,19 +146,19 @@ begin
     exit;
 
   Method := UpperCase(Input.Command);
-  Model := LowerCase(SplittedUri[1]);
+  Controller := LowerCase(SplittedUri[1]);
   Action := LowerCase(SplittedUri[2]);
 
-  if FModels.ContainsKey(LowerCase(Model)) then
+  if FControllers.ContainsKey(LowerCase(Controller)) then
   begin
-    m := FModels[Model];
+    m := FControllers[Controller];
 
     ActionId := Method + '_' + Action;
     if m.FActions.ContainsKey(ActionId) then
     begin
       md := m.FActions[ActionId];
 
-      m1 := m.NewInstance as TModel;
+      m1 := m.NewInstance as TController;
 
       m1.FFDConnection := FDConnection;
       m1.FFDQuery := FDQuery;
@@ -168,7 +168,7 @@ begin
       m1.FUserObject := nil;
 
       if (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
-        m1.FUserObject := TAccountsModel.GetUserObjectByToken(SplittedUri[3], FDConnection, UserObjectClass);
+        m1.FUserObject := TAccountsController.GetUserObjectByToken(SplittedUri[3], FDConnection, UserObjectClass);
 
       if md.PublicAccess or (m1.FUserObject <> nil) then
         md.RttiMethod.Invoke(m1, [])
@@ -182,7 +182,7 @@ begin
   end;
 end;
 
-constructor TModel.Create;
+constructor TController.Create;
 
   function FindAttribute(Attrs: TArray<TCustomAttribute>; AttrClass: TCustomAttributeClass): TCustomAttribute;
   var
@@ -224,7 +224,7 @@ begin
   end;
 end;
 
-procedure TModel.DisposeOf;
+procedure TController.DisposeOf;
 begin
   FActions.DisposeOf;
 
@@ -233,6 +233,6 @@ end;
 
 initialization
 
-TModel.Register;
+TController.Register;
 
 end.

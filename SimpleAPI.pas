@@ -45,7 +45,8 @@ type
     property UserObjectClass: TUserObjectClass read FUserObjectClass write FUserObjectClass;
     property Port: Word read GetPort write SetPort;
 
-    constructor Create(APort: Word; DBConnectionStrings: TStringList);
+    constructor Create(APort: Word; DBConnectionStrings: TStringList); overload;
+    constructor Create(APort: Word; DBConnectionStrings: TArray<string>); overload;
     procedure DisposeOf; reintroduce; virtual;
   end;
 
@@ -106,6 +107,17 @@ begin
   FHTTPServer.DefaultPort := APort;
   FHTTPServer.OnCommandGet := CommandGet;
   FHTTPServer.Active := true;
+end;
+
+constructor TSimpleAPI.Create(APort: Word; DBConnectionStrings: TArray<string>);
+var
+  s: TStringList;
+  i: integer;
+begin
+  s := TStringList.Create;
+  s.AddStrings(DBConnectionStrings);
+  Create(APort, s);
+  s.DisposeOf;
 end;
 
 procedure TSimpleAPI.DisposeOf;

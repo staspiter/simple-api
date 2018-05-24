@@ -77,24 +77,20 @@ implementation
 
 procedure TForm1.FormCreate(Sender: TObject);
 var
-  ConnectionStrings: TStringList;
   c: TFDConnection;
 begin
   TFirstController.Register;
 
-  ConnectionStrings := TStringList.Create;
-  ConnectionStrings.Add('Server=127.0.0.1');
-  ConnectionStrings.Add('Database=test');
-  ConnectionStrings.Add('User_Name=postgres');
-  ConnectionStrings.Add('Password=!2#stas$5^');
-  ConnectionStrings.Add('DriverId=PG');
-  ConnectionStrings.Add('Pooled=true');
-
-  API := TSimpleAPI.Create(8080, ConnectionStrings);
+  API := TSimpleAPI.Create(8080, [
+      'Server=127.0.0.1',
+      'Database=test',
+      'User_Name=postgres',
+      'Password=!2#stas$5^',
+      'DriverId=PG',
+      'Pooled=true'
+    ]);
 
   API.UserObjectClass := TMyUserObject; // Set user object class
-
-  ConnectionStrings.DisposeOf;
 
   // Init additional table
 

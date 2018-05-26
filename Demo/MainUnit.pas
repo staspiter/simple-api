@@ -18,23 +18,23 @@ type
     API: TSimpleAPI;
   end;
 
-  [Controller('FirstController')]
+  [Controller('First')]
   TFirstController = class(TController)
   public
 
     // *** Public available request ***
-    // http://localhost:8080/firstcontroller/helloworld
+    // http://localhost:8080/first/helloworld
     [Action, PublicAccess]
     procedure HelloWorld;
 
     // *** Reverse string from param. Method is public available ***
     // *** Used string and boolean parameters described as method arguments (with default decorator example) ***
-    // http://localhost:8080/firstcontroller/reverse/<Token>?s=123456
+    // http://localhost:8080/first/reverse/<Token>?s=123456
     [Action, PublicAccess]
     procedure Reverse(s: string; [Default('false')] mirror: boolean);
 
     // *** User available request ***
-    // http://localhost:8080/firstcontroller/greetings/<Token>
+    // http://localhost:8080/first/greetings/<Token>
     // Where Token you can get from
     // http://localhost:8080/accounts/getToken?userId=<RegisteredUserId>&passHash=<SHA256 of password>&name=<Token name, i.e. "test">
     // Where RegisteredUserId can be registered at
@@ -43,18 +43,18 @@ type
     procedure Greetings;
 
     // *** Phone number "setter" for current user ***
-    // http://localhost:8080/firstcontroller/SetPhoneNumber/<Token>?phone=123456
+    // http://localhost:8080/first/SetPhoneNumber/<Token>?phone=123456
     [Action]
     procedure SetPhoneNumber;
 
     // *** Phone number "getter" for current user ***
-    // http://localhost:8080/firstcontroller/GetPhoneNumber/<Token>?phone=123456
+    // http://localhost:8080/first/GetPhoneNumber/<Token>?phone=123456
     [Action]
     procedure GetPhoneNumber;
 
     // *** List phone numbers of all users (available for authorized users only) ***
     // *** Used custom action name "ListPhoneNumbers" instead default method name ***
-    // http://localhost:8080/firstcontroller/GetPhoneNumber/<Token>?phone=123456
+    // http://localhost:8080/first/GetPhoneNumber/<Token>?phone=123456
     [Action('ListPhoneNumbers')]
     procedure ListPhoneNumbersAction;
   end;
@@ -62,7 +62,6 @@ type
   TMyUserObject = class(TUserObject)
   private
     FPhoneNumber: string;
-
     procedure SetPhoneNumber(const phone: string);
   public
     property PhoneNumber: string read FPhoneNumber write SetPhoneNumber;

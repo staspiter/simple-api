@@ -3,7 +3,7 @@ unit SimpleAPI.Controller;
 interface
 
 uses
-  System.Generics.Collections, System.SysUtils, System.Rtti,
+  System.Generics.Collections, System.SysUtils, System.Classes, System.Rtti, JsonDataObjects,
 
   FireDAC.Comp.Client,
 
@@ -15,8 +15,6 @@ type
 
   // Attributes used for controller description
 
-  TCustomAttributeClass = class of TCustomAttribute;
-
   ControllerAttribute = class(TCustomAttribute)
   public
     FName: string;
@@ -27,7 +25,13 @@ type
   public
     FName: string;
     FMethod: string;
-    constructor Create(const AName: string; const AMethod: string = 'GET');
+    constructor Create(const AName: string = ''; const AMethod: string = 'GET');
+  end;
+
+  DefaultAttribute = class(TCustomAttribute)
+  public
+    FValue: string;
+    constructor Create(AValue: string);
   end;
 
   PublicAccessAttribute = class(TCustomAttribute);
@@ -89,10 +93,17 @@ end;
 
 { ActionAttribute }
 
-constructor ActionAttribute.Create(const AName: string; const AMethod: string = 'GET');
+constructor ActionAttribute.Create(const AName: string = ''; const AMethod: string = 'GET');
 begin
   FName := AName;
   FMethod := AMethod;
+end;
+
+{ DefaultAttribute }
+
+constructor DefaultAttribute.Create(AValue: string);
+begin
+  FValue := AValue;
 end;
 
 { TController }
@@ -137,6 +148,15 @@ var
   m, m1: TController;
   ActionId: string;
   md: TMethodData;
+  Arguments: TArray<TValue>;
+  ArgumentValue: TValue;
+  p: TRttiParameter;
+  ParamValue: string;
+  ParamValueExists, ParamNotFoundError: boolean;
+  ParamsNotFound: TArray<string>;
+  DefaultValueAttr: TCustomAttribute;
+  i: integer;
+  InvalidParamValue: boolean;
 begin
   Uri := Input.URI;
   if Uri.EndsWith('/') then
@@ -167,13 +187,68 @@ begin
       m1.FURI := SplittedUri;
       m1.FUserObject := nil;
 
-      if (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
+      if (FDConnection <> nil) and (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
         m1.FUserObject := TAccountsController.GetUserObjectByToken(SplittedUri[3], FDConnection, UserObjectClass);
 
-      if md.PublicAccess or (m1.FUserObject <> nil) then
-        md.RttiMethod.Invoke(m1, [])
+      // Collect arguments values
+
+      Arguments := [];
+      ParamsNotFound := [];
+      ParamNotFoundError := false;
+      for p in md.RttiMethod.GetParameters do
+      begin
+        ParamValue := GetParamValue(Input.Params, p.Name, ParamValueExists);
+        DefaultValueAttr := FindAttribute(p.GetAttributes, DefaultAttribute);
+
+        if not ParamValueExists then
+        begin
+          if DefaultValueAttr <> nil then
+          begin
+            ArgumentValue := GetValueFromString(DefaultAttribute(DefaultValueAttr).FValue, p.ParamType, InvalidParamValue);
+            if not InvalidParamValue then
+              Arguments := Arguments + [ArgumentValue]
+            else
+            begin
+              ParamsNotFound := ParamsNotFound + [p.Name];
+              ParamNotFoundError := true;
+            end;
+          end
+          else
+          begin
+            ParamsNotFound := ParamsNotFound + [p.Name];
+            ParamNotFoundError := true;
+          end;
+        end
+        else
+        begin
+          ArgumentValue := GetValueFromString(ParamValue, p.ParamType, InvalidParamValue);
+          if not InvalidParamValue then
+            Arguments := Arguments + [ArgumentValue]
+          else
+          begin
+            ParamsNotFound := ParamsNotFound + [p.Name];
+            ParamNotFoundError := true;
+          end;
+        end;
+
+      end;
+
+      // Call action method or error output
+
+      if ParamNotFoundError then
+        Output.ContentText := '{"error":"params_expected","params":' + string.Join(',', ParamsNotFound) + '}'
+
+      else if md.PublicAccess or (m1.FUserObject <> nil) or (FDConnection = nil) then
+        md.RttiMethod.Invoke(m1, Arguments)
+
       else
         Output.ContentText := '{"error":"auth_failed"}';
+
+      // DisposeOf all arguments-objects
+
+      for ArgumentValue in Arguments do
+        if ArgumentValue.Kind = tkClass then
+          ArgumentValue.AsObject.DisposeOf;
 
       m1.FUserObject.DisposeOf;
 
@@ -183,17 +258,6 @@ begin
 end;
 
 constructor TController.Create;
-
-  function FindAttribute(Attrs: TArray<TCustomAttribute>; AttrClass: TCustomAttributeClass): TCustomAttribute;
-  var
-    i: integer;
-  begin
-    result := nil;
-    for i := 0 to Length(Attrs) - 1 do
-      if Attrs[i] is AttrClass then
-        exit(Attrs[i]);
-  end;
-
 var
   Methods: TArray<TRttiMethod>;
   Attrs: TArray<TCustomAttribute>;
@@ -201,7 +265,7 @@ var
   ActionAttr: ActionAttribute;
   PublicAccessAttr: PublicAccessAttribute;
   md: TMethodData;
-
+  MethodName: string;
 begin
   FActions := TDictionary<string, TMethodData>.Create;
 
@@ -219,8 +283,11 @@ begin
     md.RttiMethod := Methods[i];
     md.PublicAccess := PublicAccessAttr <> nil;
 
-    FActions.Add(UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_' +
-      LowerCase(ActionAttribute(Attrs[0]).FName), md);
+    MethodName := LowerCase(ActionAttribute(Attrs[0]).FName);
+    if MethodName = '' then
+      MethodName := LowerCase(md.RttiMethod.Name);
+
+    FActions.Add(UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_' + MethodName, md);
   end;
 end;
 

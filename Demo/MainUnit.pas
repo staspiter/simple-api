@@ -85,7 +85,7 @@ begin
       'Server=127.0.0.1',
       'Database=test',
       'User_Name=postgres',
-      'Password=!2#stas$5^',
+      'Password=123456',
       'DriverId=PG',
       'Pooled=true'
     ]);

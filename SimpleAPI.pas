@@ -45,8 +45,11 @@ type
     property UserObjectClass: TUserObjectClass read FUserObjectClass write FUserObjectClass;
     property Port: Word read GetPort write SetPort;
 
+    procedure ConnectDB(DBConnectionStrings: TStringList);
+
     constructor Create(APort: Word; DBConnectionStrings: TStringList); overload;
     constructor Create(APort: Word; DBConnectionStrings: TArray<string>); overload;
+    constructor Create(APort: Word); overload;
     procedure DisposeOf; reintroduce; virtual;
   end;
 
@@ -65,16 +68,33 @@ type
 { TSimpleAPI }
 
 constructor TSimpleAPI.Create(APort: Word; DBConnectionStrings: TStringList);
-var
-  c: TFDConnection;
 begin
   FUserObjectClass := TUserObject;
 
+  if DBConnectionStrings.Count = 0 then
+  begin
+    // No DB mode
+    FFDManager := nil;
+  end
+  else
+    ConnectDB(DBConnectionStrings);
+
+  // Init HTTP server
+
+  FHTTPServer := TIdHTTPServer.Create;
+  FHTTPServer.DefaultPort := APort;
+  FHTTPServer.OnCommandGet := CommandGet;
+  FHTTPServer.Active := true;
+end;
+
+procedure TSimpleAPI.ConnectDB(DBConnectionStrings: TStringList);
+var
+  c: TFDConnection;
+begin
   // Init base
 
   FFDManager := TFDManager.Create(nil);
-  FFDManager.AddConnectionDef('default', DBConnectionStrings.Values['DriverId'],
-    DBConnectionStrings);
+  FFDManager.AddConnectionDef('default', DBConnectionStrings.Values['DriverId'], DBConnectionStrings);
 
   // Init base structure for API (tokens, users)
 
@@ -100,19 +120,11 @@ begin
     ');');
 
   c.DisposeOf;
-
-  // Init HTTP server
-
-  FHTTPServer := TIdHTTPServer.Create;
-  FHTTPServer.DefaultPort := APort;
-  FHTTPServer.OnCommandGet := CommandGet;
-  FHTTPServer.Active := true;
 end;
 
 constructor TSimpleAPI.Create(APort: Word; DBConnectionStrings: TArray<string>);
 var
   s: TStringList;
-  i: integer;
 begin
   s := TStringList.Create;
   s.AddStrings(DBConnectionStrings);
@@ -120,13 +132,21 @@ begin
   s.DisposeOf;
 end;
 
+constructor TSimpleAPI.Create(APort: Word);
+begin
+  Create(APort, []);
+end;
+
 procedure TSimpleAPI.DisposeOf;
 begin
   FHTTPServer.Active := false;
   FHTTPServer.DisposeOf;
 
-  FFDManager.Close;
-  FFDManager.DisposeOf;
+  if FFDManager <> nil then
+  begin
+    FFDManager.Close;
+    FFDManager.DisposeOf;
+  end;
 
   inherited;
 end;
@@ -154,27 +174,39 @@ begin
   AResponseInfo.ContentType := 'text/html; charset=utf-8';
   TIdHTTPRequestInfo2(ARequestInfo).DecodeAndSetParams(ARequestInfo.UnparsedParams);
 
-  // Create FDConnection and FDQuery for request
+  if FFDManager = nil then
+  begin
+    // No DB mode
 
-  FDConnection := TFDConnection.Create(nil);
-  FDConnection.ConnectionDefName := 'default';
-  FDConnection.Connected := true;
+    FDConnection := nil;
+    FDQuery := nil;
+  end
+  else
+  begin
+    // Create FDConnection and FDQuery for request
 
-  FDQuery := TFDQuery.Create(nil);
-  FDQuery.Connection := FDConnection;
+    FDConnection := TFDConnection.Create(nil);
+    FDConnection.ConnectionDefName := 'default';
+    FDConnection.Connected := true;
 
-  // Execute request
+    FDQuery := TFDQuery.Create(nil);
+    FDQuery.Connection := FDConnection;
 
-  FDConnection.StartTransaction;
+    // Execute request
+
+    FDConnection.StartTransaction;
+  end;
 
   try
     TController.Execute(ARequestInfo, AResponseInfo, FDConnection, FDQuery, FUserObjectClass);
 
-    FDConnection.Commit;
+    if FFDManager <> nil then
+      FDConnection.Commit;
   except
     on e: Exception do
     begin
-      FDConnection.Rollback;
+      if FDManager <> nil then
+        FDConnection.Rollback;
 
       json := TJsonObject.Create;
       json.S['error'] := 'server_error';
@@ -186,9 +218,12 @@ begin
 
   // Free FDConnection and FDQuery
 
-  FDQuery.DisposeOf;
-  FDConnection.Connected := false;
-  FDConnection.DisposeOf;
+  if FFDManager <> nil then
+  begin
+    FDQuery.DisposeOf;
+    FDConnection.Connected := false;
+    FDConnection.DisposeOf;
+  end;
 end;
 
 { TIdHTTPRequestInfo2 }

@@ -254,7 +254,9 @@ begin
 
       m1.DisposeOf;
     end;
-  end;
+  end
+  else
+    Output.ContentText := Format('{"error":"controller_not_found","controller":"%s"}', [LowerCase(Controller)]);
 end;
 
 constructor TController.Create;

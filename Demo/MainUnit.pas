@@ -24,8 +24,14 @@ type
 
     // *** Public available request ***
     // http://localhost:8080/firstcontroller/helloworld
-    [Action('HelloWorld'), PublicAccess]
+    [Action, PublicAccess]
     procedure HelloWorld;
+
+    // *** Reverse string from param. Method is public available ***
+    // *** Used string and boolean parameters described as method arguments (with default decorator example) ***
+    // http://localhost:8080/firstcontroller/reverse/<Token>?s=123456
+    [Action, PublicAccess]
+    procedure Reverse(s: string; [Default('false')] mirror: boolean);
 
     // *** User available request ***
     // http://localhost:8080/firstcontroller/greetings/<Token>
@@ -33,28 +39,24 @@ type
     // http://localhost:8080/accounts/getToken?userId=<RegisteredUserId>&passHash=<SHA256 of password>&name=<Token name, i.e. "test">
     // Where RegisteredUserId can be registered at
     // http://localhost:8080/accounts/create?userId=<UserId>&passHash=<SHA256 of password>
-    [Action('Greetings')]
+    [Action]
     procedure Greetings;
-
-    // *** Reverse string from param. Method is available for authorized user ***
-    // http://localhost:8080/firstcontroller/reverse/<Token>?s=123456
-    [Action('Reverse')]
-    procedure Reverse;
 
     // *** Phone number "setter" for current user ***
     // http://localhost:8080/firstcontroller/SetPhoneNumber/<Token>?phone=123456
-    [Action('SetPhoneNumber')]
+    [Action]
     procedure SetPhoneNumber;
 
     // *** Phone number "getter" for current user ***
     // http://localhost:8080/firstcontroller/GetPhoneNumber/<Token>?phone=123456
-    [Action('GetPhoneNumber')]
+    [Action]
     procedure GetPhoneNumber;
 
     // *** List phone numbers of all users (available for authorized users only) ***
+    // *** Used custom action name "ListPhoneNumbers" instead default method name ***
     // http://localhost:8080/firstcontroller/GetPhoneNumber/<Token>?phone=123456
     [Action('ListPhoneNumbers')]
-    procedure ListPhoneNumbers;
+    procedure ListPhoneNumbersAction;
   end;
 
   TMyUserObject = class(TUserObject)
@@ -130,15 +132,12 @@ begin
   Answer.DisposeOf;
 end;
 
-procedure TFirstController.Reverse;
+procedure TFirstController.Reverse(s: string; mirror: boolean);
 begin
-  if Input.Params.Values['s'] = '' then
-  begin
-    Output.ContentText := 'Param "s" is empty';
-    exit;
-  end;
-
-  Output.ContentText := ReverseString(Input.Params.Values['s']);
+  if mirror then
+    Output.ContentText := s + ReverseString(s)
+  else
+    Output.ContentText := ReverseString(s);
 end;
 
 procedure TFirstController.SetPhoneNumber;
@@ -160,7 +159,7 @@ begin
   Output.ContentText := TMyUserObject(UserObject).PhoneNumber;
 end;
 
-procedure TFirstController.ListPhoneNumbers;
+procedure TFirstController.ListPhoneNumbersAction;
 var
   arr: TJsonArray;
 begin

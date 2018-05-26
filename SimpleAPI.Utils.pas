@@ -47,12 +47,23 @@ begin
 
   try
     case TargetType.TypeKind of
-      tkInteger, tkEnumeration, tkSet:              result := TValue.From<Integer>(s.ToInteger);
-      tkInt64:                                      result := TValue.From<Int64>(s.ToInt64);
-      tkChar, tkWideChar:                           result := TValue.From<Char>(s[1]);
-      tkFloat:                                      result := TValue.From<Double>(s.ToDouble);
-      tkString, tkLString, tkWString, tkUString:    result := TValue.From<string>(s);
-      tkVariant:                                    result := s;
+      tkInteger, tkEnumeration, tkSet:
+        begin
+          if TargetType.QualifiedName = 'System.Boolean' then
+            result := TValue.From<Boolean>((LowerCase(s) = 'true') or (s = '1'))
+          else
+            result := TValue.From<Integer>(s.ToInteger);
+        end;
+      tkInt64:
+        result := TValue.From<Int64>(s.ToInt64);
+      tkChar, tkWideChar:
+        result := TValue.From<Char>(s[1]);
+      tkFloat:
+        result := TValue.From<Double>(s.ToDouble);
+      tkString, tkLString, tkWString, tkUString:
+        result := TValue.From<string>(s);
+      tkVariant:
+        result := s;
       else
         InvalidParamValue := true;
     end;

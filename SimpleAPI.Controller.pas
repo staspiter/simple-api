@@ -236,7 +236,7 @@ begin
       // Call action method or error output
 
       if ParamNotFoundError then
-        Output.ContentText := '{"error":"params_expected","params":' + string.Join(',', ParamsNotFound) + '}'
+        Output.ContentText := Format('{"error":"params_expected","params":"%s"}', [string.Join(',', ParamsNotFound)])
 
       else if md.PublicAccess or (m1.FUserObject <> nil) or (FDConnection = nil) then
         md.RttiMethod.Invoke(m1, Arguments)

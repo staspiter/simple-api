@@ -168,7 +168,7 @@ begin
       m1.FUserObject := nil;
 
       if (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
-        m1.FUserObject := TAccountsController.GetUserObjectByToken(SplittedUri[3], FDConnection, UserObjectClass);
+        m1.FUserObject := TAccountsController.GetUserObjectByToken(LowerCase(SplittedUri[3]), FDConnection, UserObjectClass);
 
       if md.PublicAccess or (m1.FUserObject <> nil) then
         md.RttiMethod.Invoke(m1, [])

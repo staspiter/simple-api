@@ -45,7 +45,7 @@ var
 begin
   UserId := Input.Params.Values['userId'];
   Name := Input.Params.Values['name'];
-  PassHashRequest := Input.Params.Values['passHash'];
+  PassHashRequest := LowerCase(Input.Params.Values['passHash']);
 
   // Validate
 
@@ -89,7 +89,7 @@ var
   UserId, PassHashRequest, PassHash: string;
 begin
   UserId := Input.Params.Values['userId'];
-  PassHashRequest := Input.Params.Values['passHash'];
+  PassHashRequest := LowerCase(Input.Params.Values['passHash']);
 
   // Validate
 

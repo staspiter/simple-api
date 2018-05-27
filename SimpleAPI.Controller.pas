@@ -188,7 +188,7 @@ begin
       m1.FUserObject := nil;
 
       if (FDConnection <> nil) and (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
-        m1.FUserObject := TAccountsController.GetUserObjectByToken(SplittedUri[3], FDConnection, UserObjectClass);
+        m1.FUserObject := TAccountsController.GetUserObjectByToken(LowerCase(SplittedUri[3]), FDConnection, UserObjectClass);
 
       // Collect arguments values
 

@@ -172,6 +172,7 @@ begin
 
   ARequestInfo.Charset := 'utf-8';
   AResponseInfo.ContentType := 'text/html; charset=utf-8';
+  AResponseInfo.CustomHeaders.AddValue('Access-Control-Allow-Origin', '*');
   TIdHTTPRequestInfo2(ARequestInfo).DecodeAndSetParams(ARequestInfo.UnparsedParams);
 
   if FFDManager = nil then

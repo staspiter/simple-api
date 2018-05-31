@@ -38,7 +38,7 @@ type
 
   // Base TController class
 
-  TMethodData = record
+  TActionData = record
     RttiMethod: TRttiMethod;
     PublicAccess: boolean;
   end;
@@ -49,29 +49,20 @@ type
   private class var
     FRTTIContext: TRttiContext;
     FControllers: TDictionary<string, TController>;
+    FActions: TDictionary<string, TActionData>;
 
   private
-    FActions: TDictionary<string, TMethodData>;
-
-    FFDConnection: TFDConnection;
-    FFDQuery: TFDQuery;
-    FInput: TIdHTTPRequestInfo;
-    FOutput: TIdHTTPResponseInfo;
-    FURI: TArray<string>;
-    FUserObject: TUserObject;
+    FParams: TStrings;
+    FSessionObject: TSessionObject;
 
   public
-    class procedure Execute(Input: TIdHTTPRequestInfo; Output: TIdHTTPResponseInfo;
-      FDConnection: TFDConnection; FDQuery: TFDQuery; UserObjectClass: TUserObjectClass);
+    class function ExecuteNew(const AControllerName, AMethodName, AActionName: string; AParams: TStrings;
+      ASessionObject: TSessionObject): string;
 
-    property Input: TIdHTTPRequestInfo read FInput;
-    property Output: TIdHTTPResponseInfo read FOutput;
-    property FDConnection: TFDConnection read FFDConnection;
-    property FDQuery: TFDQuery read FFDQuery;
-    property URI: TArray<string> read FURI;
-    property UserObject: TUserObject read FUserObject;
+    property SessionObject: TSessionObject read FSessionObject;
+    property Params: TStrings read FParams;
 
-    constructor Create;
+    constructor Create; virtual;
     procedure DisposeOf; reintroduce; virtual;
 
     class procedure Init;
@@ -82,7 +73,7 @@ type
 implementation
 
 uses
-  SimpleAPI.Utils, SimpleAPI.Controller.Accounts;
+  SimpleAPI.Utils, SimpleAPI.Controller.Users;
 
 { ControllerAttribute }
 
@@ -114,7 +105,9 @@ begin
     exit;
 
   FRTTIContext := TRttiContext.Create;
+
   FControllers := TDictionary<string, TController>.Create;
+  FActions := TDictionary<string, TActionData>.Create;
 end;
 
 class destructor TController.Destroy;
@@ -125,153 +118,36 @@ begin
     m.DisposeOf;
   FControllers.DisposeOf;
 
+  FActions.DisposeOf;
+
   FRTTIContext.Free;
 end;
 
 class procedure TController.Register;
 var
   Attrs: TArray<TCustomAttribute>;
-begin
-  TController.Init;
-
-  Attrs := FRTTIContext.GetType(Self).GetAttributes;
-  if (Length(Attrs) > 0) and (Attrs[0] is ControllerAttribute) then
-    FControllers.Add(LowerCase(ControllerAttribute(Attrs[0]).FName), Self.Create);
-end;
-
-class procedure TController.Execute(Input: TIdHTTPRequestInfo; Output: TIdHTTPResponseInfo;
-  FDConnection: TFDConnection; FDQuery: TFDQuery; UserObjectClass: TUserObjectClass);
-var
-  Uri: string;
-  SplittedUri: TArray<string>;
-  Method, Controller, Action: string;
-  m, m1: TController;
-  ActionId: string;
-  md: TMethodData;
-  Arguments: TArray<TValue>;
-  ArgumentValue: TValue;
-  p: TRttiParameter;
-  ParamValue: string;
-  ParamValueExists, ParamNotFoundError: boolean;
-  ParamsNotFound: TArray<string>;
-  DefaultValueAttr: TCustomAttribute;
-  i: integer;
-  InvalidParamValue: boolean;
-begin
-  Uri := Input.URI;
-  if Uri.EndsWith('/') then
-    Uri := Copy(Uri, 1, Length(Uri) - 1);
-  SplittedUri := Uri.Split(['/']);
-  if Length(SplittedUri) < 3 then
-    exit;
-
-  Method := UpperCase(Input.Command);
-  Controller := LowerCase(SplittedUri[1]);
-  Action := LowerCase(SplittedUri[2]);
-
-  if FControllers.ContainsKey(LowerCase(Controller)) then
-  begin
-    m := FControllers[Controller];
-
-    ActionId := Method + '_' + Action;
-    if m.FActions.ContainsKey(ActionId) then
-    begin
-      md := m.FActions[ActionId];
-
-      m1 := m.NewInstance as TController;
-
-      m1.FFDConnection := FDConnection;
-      m1.FFDQuery := FDQuery;
-      m1.FInput := Input;
-      m1.FOutput := Output;
-      m1.FURI := SplittedUri;
-      m1.FUserObject := nil;
-
-      if (FDConnection <> nil) and (not md.PublicAccess) and (Length(SplittedUri) > 3) and CheckString([SplittedUri[3]], [64, 64]) then
-        m1.FUserObject := TAccountsController.GetUserObjectByToken(LowerCase(SplittedUri[3]), FDConnection, UserObjectClass);
-
-      // Collect arguments values
-
-      Arguments := [];
-      ParamsNotFound := [];
-      ParamNotFoundError := false;
-      for p in md.RttiMethod.GetParameters do
-      begin
-        ParamValue := GetParamValue(Input.Params, p.Name, ParamValueExists);
-        DefaultValueAttr := FindAttribute(p.GetAttributes, DefaultAttribute);
-
-        if not ParamValueExists then
-        begin
-          if DefaultValueAttr <> nil then
-          begin
-            ArgumentValue := GetValueFromString(DefaultAttribute(DefaultValueAttr).FValue, p.ParamType, InvalidParamValue);
-            if not InvalidParamValue then
-              Arguments := Arguments + [ArgumentValue]
-            else
-            begin
-              ParamsNotFound := ParamsNotFound + [p.Name];
-              ParamNotFoundError := true;
-            end;
-          end
-          else
-          begin
-            ParamsNotFound := ParamsNotFound + [p.Name];
-            ParamNotFoundError := true;
-          end;
-        end
-        else
-        begin
-          ArgumentValue := GetValueFromString(ParamValue, p.ParamType, InvalidParamValue);
-          if not InvalidParamValue then
-            Arguments := Arguments + [ArgumentValue]
-          else
-          begin
-            ParamsNotFound := ParamsNotFound + [p.Name];
-            ParamNotFoundError := true;
-          end;
-        end;
-
-      end;
-
-      // Call action method or error output
-
-      if ParamNotFoundError then
-        Output.ContentText := Format('{"error":"params_expected","params":"%s"}', [string.Join(',', ParamsNotFound)])
-
-      else if md.PublicAccess or (m1.FUserObject <> nil) or (FDConnection = nil) then
-        md.RttiMethod.Invoke(m1, Arguments)
-
-      else
-        Output.ContentText := '{"error":"auth_failed"}';
-
-      // DisposeOf all arguments-objects
-
-      for ArgumentValue in Arguments do
-        if ArgumentValue.Kind = tkClass then
-          ArgumentValue.AsObject.DisposeOf;
-
-      m1.FUserObject.DisposeOf;
-
-      m1.DisposeOf;
-    end;
-  end
-  else
-    Output.ContentText := Format('{"error":"controller_not_found","controller":"%s"}', [LowerCase(Controller)]);
-end;
-
-constructor TController.Create;
-var
+  ControllerName, ActionName: string;
   Methods: TArray<TRttiMethod>;
-  Attrs: TArray<TCustomAttribute>;
   i: integer;
   ActionAttr: ActionAttribute;
   PublicAccessAttr: PublicAccessAttribute;
-  md: TMethodData;
-  MethodName: string;
+  md: TActionData;
 begin
-  FActions := TDictionary<string, TMethodData>.Create;
+  TController.Init;
 
-  Methods := FRTTIContext.GetType(ClassType).GetMethods;
+  // Add controller
+
+  Attrs := FRTTIContext.GetType(Self).GetAttributes;
+  ControllerName := '';
+  if (Length(Attrs) > 0) and (Attrs[0] is ControllerAttribute) then
+  begin
+    ControllerName := LowerCase(ControllerAttribute(Attrs[0]).FName);
+    FControllers.Add(ControllerName, Self.Create);
+  end;
+
+  // Add controller actions
+
+  Methods := FRTTIContext.GetType(Self).GetMethods;
   for i := 0 to Length(Methods) - 1 do
   begin
     Attrs := Methods[i].GetAttributes;
@@ -285,18 +161,113 @@ begin
     md.RttiMethod := Methods[i];
     md.PublicAccess := PublicAccessAttr <> nil;
 
-    MethodName := LowerCase(ActionAttribute(Attrs[0]).FName);
-    if MethodName = '' then
-      MethodName := LowerCase(md.RttiMethod.Name);
+    ActionName := LowerCase(ActionAttribute(Attrs[0]).FName);
+    if ActionName = '' then
+      ActionName := LowerCase(md.RttiMethod.Name);
 
-    FActions.Add(UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_' + MethodName, md);
+    FActions.Add(ControllerName + '_' + UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_' + ActionName, md);
   end;
+end;
+
+class function TController.ExecuteNew(const AControllerName, AMethodName, AActionName: string;
+  AParams: TStrings; ASessionObject: TSessionObject): string;
+var
+  ActionId: string;
+  c, c1: TController;
+  ad: TActionData;
+
+  Arguments: TArray<TValue>;
+  ArgumentValue: TValue;
+  p: TRttiParameter;
+  ParamValue: string;
+  ParamValueExists, ParamNotFoundError: boolean;
+  ParamsNotFound: TArray<string>;
+  DefaultValueAttr: TCustomAttribute;
+  i: integer;
+  InvalidParamValue: boolean;
+begin
+  ActionId := LowerCase(AControllerName) + '_' + UpperCase(AMethodName) + '_' + LowerCase(AActionName);
+
+  if not FControllers.ContainsKey(LowerCase(AControllerName)) then
+    exit(Format('{"error":"controller_not_found","controller":"%s"}', [LowerCase(AControllerName)]));
+
+  if not FActions.ContainsKey(ActionId) then
+    exit(Format('{"error":"action_not_found","action":"%s"}', [ActionId]));
+
+  c := FControllers[LowerCase(AControllerName)];
+  ad := FActions[ActionId];
+
+  c1 := c.NewInstance as TController;
+  c1.FParams := AParams;
+  c1.FSessionObject := ASessionObject;
+
+  // Collect arguments values
+
+  Arguments := [];
+  ParamsNotFound := [];
+  ParamNotFoundError := false;
+  for p in ad.RttiMethod.GetParameters do
+  begin
+    ParamValue := GetParamValue(AParams, p.Name, ParamValueExists);
+    DefaultValueAttr := FindAttribute(p.GetAttributes, DefaultAttribute);
+    if not ParamValueExists then
+    begin
+      if DefaultValueAttr <> nil then
+      begin
+        ArgumentValue := GetValueFromString(DefaultAttribute(DefaultValueAttr).FValue, p.ParamType, InvalidParamValue);
+        if not InvalidParamValue then
+          Arguments := Arguments + [ArgumentValue]
+        else
+        begin
+          ParamsNotFound := ParamsNotFound + [p.Name];
+          ParamNotFoundError := true;
+        end;
+      end
+      else
+      begin
+        ParamsNotFound := ParamsNotFound + [p.Name];
+        ParamNotFoundError := true;
+      end;
+    end
+    else
+    begin
+      ArgumentValue := GetValueFromString(ParamValue, p.ParamType, InvalidParamValue);
+      if not InvalidParamValue then
+        Arguments := Arguments + [ArgumentValue]
+      else
+      begin
+        ParamsNotFound := ParamsNotFound + [p.Name];
+        ParamNotFoundError := true;
+      end;
+    end;
+  end;
+
+  // Call action method or error output
+
+  if ParamNotFoundError then
+    result := Format('{"error":"params_expected","params":"%s"}', [string.Join(',', ParamsNotFound)])
+
+  else if ad.PublicAccess or (c1.FSessionObject.UserId <> '') or (c1.FSessionObject.FDConnection = nil) then
+    result := ad.RttiMethod.Invoke(c1, Arguments).AsString
+
+  else
+    result := '{"error":"auth_required"}';
+
+  // DisposeOf all arguments-objects
+
+  for ArgumentValue in Arguments do
+    if ArgumentValue.Kind = tkClass then
+      ArgumentValue.AsObject.DisposeOf;
+
+  c1.DisposeOf;
+end;
+
+constructor TController.Create;
+begin
 end;
 
 procedure TController.DisposeOf;
 begin
-  FActions.DisposeOf;
-
   inherited;
 end;
 

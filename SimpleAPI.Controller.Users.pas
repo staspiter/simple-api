@@ -107,8 +107,4 @@ begin
   result := THashSHA2.GetHashString(UserId + PassHashRequest {SHA256 of real password} + 'bf3jH39k');
 end;
 
-initialization
-
-TUsersController.Register;
-
 end.

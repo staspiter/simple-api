@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Web Socket test</title>
+</head>
+<body>
+	<b>Server time and random number (via WebSocket):</b>
+	<div id="time"></div>
+
+	<script type="text/javascript">
+		var connected = false,
+			socket = new WebSocket("ws://127.0.0.1:8083/");
+
+		socket.onmessage = function(event) {
+			document.getElementById('time').innerHTML = event.data;
+		};
+
+		setInterval(
+			function() {
+				if (connected)
+			 		socket.send(JSON.stringify( { act: "WSTest/GetTimeAndRandomNumber" } ));
+			}, 100);
+
+		socket.onopen = function() {
+		 	console.log("Соединение установлено.");
+		 	connected = true;
+		};
+
+		socket.onclose = function(event) {
+			if (event.wasClean) {
+				console.log('Соединение закрыто чисто');
+			} else {
+				console.log('Обрыв соединения');
+			}
+			connected = false;
+		};
+
+		socket.onerror = function(error) {
+		 	console.log("Ошибка " + error.message);
+		};
+	</script>
+</body>
+</html>

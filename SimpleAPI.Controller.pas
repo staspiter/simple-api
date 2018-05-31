@@ -54,20 +54,23 @@ type
   private
     FParams: TStrings;
     FSessionObject: TSessionObject;
+    FAPI: TSimpleAPI;
 
   public
-    class function ExecuteNew(const AControllerName, AMethodName, AActionName: string; AParams: TStrings;
+    class function Execute(AAPI: TSimpleAPI; const AControllerName, AMethodName, AActionName: string; AParams: TStrings;
       ASessionObject: TSessionObject): string;
 
     property SessionObject: TSessionObject read FSessionObject;
     property Params: TStrings read FParams;
+    property API: TSimpleAPI read FAPI;
 
     constructor Create; virtual;
     procedure DisposeOf; reintroduce; virtual;
 
     class procedure Init;
     class destructor Destroy;
-    class procedure Register;
+
+    class function Register: string;
   end;
 
 implementation
@@ -123,7 +126,7 @@ begin
   FRTTIContext.Free;
 end;
 
-class procedure TController.Register;
+class function TController.Register: string;
 var
   Attrs: TArray<TCustomAttribute>;
   ControllerName, ActionName: string;
@@ -133,17 +136,24 @@ var
   PublicAccessAttr: PublicAccessAttribute;
   md: TActionData;
 begin
+  result := '';
+
   TController.Init;
 
   // Add controller
 
   Attrs := FRTTIContext.GetType(Self).GetAttributes;
   ControllerName := '';
-  if (Length(Attrs) > 0) and (Attrs[0] is ControllerAttribute) then
-  begin
-    ControllerName := LowerCase(ControllerAttribute(Attrs[0]).FName);
-    FControllers.Add(ControllerName, Self.Create);
-  end;
+  if not((Length(Attrs) > 0) and (Attrs[0] is ControllerAttribute)) then
+    exit;
+
+  ControllerName := LowerCase(ControllerAttribute(Attrs[0]).FName);
+  result := ControllerName;
+
+  if FControllers.ContainsKey(ControllerName) then
+    exit;
+
+  FControllers.Add(ControllerName, Self.Create);
 
   // Add controller actions
 
@@ -169,7 +179,7 @@ begin
   end;
 end;
 
-class function TController.ExecuteNew(const AControllerName, AMethodName, AActionName: string;
+class function TController.Execute(AAPI: TSimpleAPI; const AControllerName, AMethodName, AActionName: string;
   AParams: TStrings; ASessionObject: TSessionObject): string;
 var
   ActionId: string;
@@ -200,6 +210,7 @@ begin
   c1 := c.NewInstance as TController;
   c1.FParams := AParams;
   c1.FSessionObject := ASessionObject;
+  c1.FAPI := AAPI;
 
   // Collect arguments values
 
@@ -247,7 +258,7 @@ begin
   if ParamNotFoundError then
     result := Format('{"error":"params_expected","params":"%s"}', [string.Join(',', ParamsNotFound)])
 
-  else if ad.PublicAccess or (c1.FSessionObject.UserId <> '') or (c1.FSessionObject.FDConnection = nil) then
+  else if ad.PublicAccess or (c1.FSessionObject.UserId <> '') or (not AAPI.InitializedUsers) then
     result := ad.RttiMethod.Invoke(c1, Arguments).AsString
 
   else
@@ -270,9 +281,5 @@ procedure TController.DisposeOf;
 begin
   inherited;
 end;
-
-initialization
-
-TController.Register;
 
 end.

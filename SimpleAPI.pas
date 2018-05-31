@@ -4,7 +4,7 @@ interface
 
 uses
 
-  System.Classes, System.SysUtils, JsonDataObjects,
+  System.Classes, System.SysUtils, System.Generics.Collections, JsonDataObjects,
 
   // FireDAC
 
@@ -44,15 +44,22 @@ type
   TServerMode = (HTTP, WebSocket);
 
   TSimpleAPI = class
+  private class var
+    FDBManager: TFDManager;
+  
   private
     FServerMode: TServerMode;
+    FConnectionUniqueDef: string;
 
     FIdServerIOHandlerSSLOpenSSL: TIdServerIOHandlerSSLOpenSSL;
     FHTTPServer: TIdHTTPServer;
     FWSServer: TWebSocketServer;
 
-    FFDManager: TFDManager;
     FSessionObjectClass: TSessionObjectClass;
+
+    FRegisteredControllers: TList<string>;
+
+    FUsersInitialized, FDBInitialized: boolean;
 
     procedure HTTPConnect(AContext: TIdContext);
     procedure HTTPCommandGet(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
@@ -70,20 +77,29 @@ type
     property Port: Word read GetPort write SetPort;
 
     function InitializedDB: boolean;
+    function InitializedUsers: boolean;
     function InitializedSSL: boolean;
 
     procedure InitDB(DBConnectionStrings: TStringList); overload;
     procedure InitDB(DBConnectionStrings: TArray<string>); overload;
+    procedure InitUsers;
     procedure InitSSL(CertFile, RootCertFile, KeyFile, DHParamsFile: string; Version: TIdSSLVersion = TIdSSLVersion.sslvTLSv1_2);
+
+    procedure RegisterControllers(ControllersArr: TArray<TClass>);
+
+    property ConnectionDef: string read FConnectionUniqueDef;
 
     constructor Create(AMode: TServerMode; APort: Word); overload;
     procedure DisposeOf; reintroduce; virtual;
+
+    class constructor Create;
+    class destructor Destroy;
   end;
 
 implementation
 
 uses
-  SimpleAPI.Utils, SimpleAPI.Controller;
+  SimpleAPI.Utils, SimpleAPI.Controller, SimpleAPI.Controller.Users;
 
 type
 
@@ -94,11 +110,25 @@ type
 
 { TSimpleAPI }
 
+class constructor TSimpleAPI.Create;
+begin
+  FDBManager := TFDManager.Create(nil);
+end;
+
+class destructor TSimpleAPI.Destroy;
+begin
+  FDBManager.Close;
+  FDBManager.DisposeOf;
+end;
+
 constructor TSimpleAPI.Create(AMode: TServerMode; APort: Word);
 begin
   FServerMode := AMode;
   FSessionObjectClass := TSessionObject;
-  FFDManager := nil;
+  FRegisteredControllers := TList<string>.Create;
+  FUsersInitialized := false;
+  FDBInitialized := false;
+  FConnectionUniqueDef := GenerateUniqueId;
 
   // Init server
 
@@ -130,9 +160,6 @@ end;
 
 procedure TSimpleAPI.DisposeOf;
 begin
-  if FIdServerIOHandlerSSLOpenSSL <> nil then
-    FIdServerIOHandlerSSLOpenSSL.DisposeOf;
-
   case FServerMode of
     HTTP:
       begin
@@ -146,11 +173,10 @@ begin
       end;
   end;
 
-  if FFDManager <> nil then
-  begin
-    FFDManager.Close;
-    FFDManager.DisposeOf;
-  end;
+  if FIdServerIOHandlerSSLOpenSSL <> nil then
+    FIdServerIOHandlerSSLOpenSSL.DisposeOf;
+
+  FRegisteredControllers.DisposeOf;
 
   inherited;
 end;
@@ -160,44 +186,31 @@ var
   c: TFDConnection;
 begin
   try
-    // Init base
+    // Force 'Pooled=true' string
 
-    FFDManager := TFDManager.Create(nil);
-    FFDManager.AddConnectionDef('default', DBConnectionStrings.Values['DriverId'], DBConnectionStrings);
+    DBConnectionStrings.Add('Pooled=true');
+  
+    // Init DB manager
+    
+    FDBManager.AddConnectionDef(FConnectionUniqueDef, DBConnectionStrings.Values['DriverId'], DBConnectionStrings);
 
-    // Init base structure for API (tokens, users)
+    // Check DB connection
 
     c := TFDConnection.Create(nil);
-    c.ConnectionDefName := 'default';
+    c.ConnectionDefName := FConnectionUniqueDef;
     c.Connected := true;
 
     if not c.Connected then
-      raise Exception.Create('Database connection failed');
-
-    c.ExecSQL(
-      'CREATE TABLE IF NOT EXISTS tokens ('+
-        'token varchar(64) PRIMARY KEY,'+
-        'name varchar(50),'+
-        'userId varchar(50),'+
-        'CONSTRAINT unique_userId_name UNIQUE (userId, name)'+
-      ');');
-
-    c.ExecSQL(
-      'CREATE TABLE IF NOT EXISTS users ('+
-        'userid varchar(50) PRIMARY KEY,'+
-        'passhash varchar(64)'+
-      ');');
+      raise Exception.Create('DB connection failed');
 
     c.DisposeOf;
 
+    FDBInitialized := true;
   except
     on e: Exception do
     begin
       if c <> nil then
         c.DisposeOf;
-      if FFDManager <> nil then
-        FFDManager.DisposeOf;
-      FFDManager := nil;
 
       raise Exception.Create(e.Message + #13#10 + 'API works in NoDB mode');
     end;
@@ -221,6 +234,55 @@ begin
       raise Exception.Create(e.Message);
     end;
   end;
+end;
+
+procedure TSimpleAPI.InitUsers;
+var
+  c: TFDConnection;
+begin
+  if not InitializedDB then
+    raise Exception.Create('DB must be initialized first');
+
+  // Init base structure for API (tokens, users)
+
+  try
+    c := TFDConnection.Create(nil);
+    c.ConnectionDefName := ConnectionDef;
+    c.Connected := true;
+
+    if not c.Connected then
+      raise Exception.Create('DB connection failed');
+
+    c.ExecSQL(
+      'CREATE TABLE IF NOT EXISTS tokens ('+
+        'token varchar(64) PRIMARY KEY,'+
+        'name varchar(50),'+
+        'userId varchar(50),'+
+        'CONSTRAINT unique_userId_name UNIQUE (userId, name)'+
+      ');');
+
+    c.ExecSQL(
+      'CREATE TABLE IF NOT EXISTS users ('+
+        'userid varchar(50) PRIMARY KEY,'+
+        'passhash varchar(64)'+
+      ');');
+
+    c.DisposeOf;
+  except
+    on e: Exception do
+    begin
+      if c <> nil then
+        c.DisposeOf;
+
+      raise Exception.Create(e.Message + #13#10 + 'API works in NoDB mode');
+    end;
+  end;
+
+  // Register users controller
+
+  RegisterControllers([TUsersController]);
+
+  FUsersInitialized := true;
 end;
 
 procedure TSimpleAPI.InitSSL(CertFile, RootCertFile, KeyFile, DHParamsFile: string;
@@ -253,12 +315,17 @@ end;
 
 function TSimpleAPI.InitializedDB: boolean;
 begin
-  result := FFDManager <> nil;
+  result := FDBInitialized;
 end;
 
 function TSimpleAPI.InitializedSSL: boolean;
 begin
   result := FIdServerIOHandlerSSLOpenSSL <> nil;
+end;
+
+function TSimpleAPI.InitializedUsers: boolean;
+begin
+  result := FUsersInitialized;
 end;
 
 function TSimpleAPI.GetPort: Word;
@@ -275,6 +342,26 @@ begin
     HTTP: FHTTPServer.Bindings.DefaultPort := Value;
     WebSocket: FWSServer.Bindings.DefaultPort := Value;
   end;
+end;
+
+procedure TSimpleAPI.RegisterControllers(ControllersArr: TArray<TClass>);
+var
+  c: TClass;
+  ControllerName: string;
+begin
+  for c in ControllersArr do
+    if c.InheritsFrom(TController) then
+    begin
+      ControllerName := TControllerClass(c).Register;
+
+      if ControllerName = '' then
+        Continue;
+
+      if not FRegisteredControllers.Contains(ControllerName) then
+        FRegisteredControllers.Add(ControllerName);
+    end
+    else
+      raise Exception.Create(Format('"%" is not a TController class', [c.ClassName]));
 end;
 
 procedure TSimpleAPI.HTTPConnect(AContext: TIdContext);
@@ -331,12 +418,12 @@ begin
     SessionObject := FSessionObjectClass.Create(Self);
 
     // Start DB transaction
-    if FFDManager <> nil then
+    if SessionObject.FDConnection <> nil then
       SessionObject.FDConnection.StartTransaction;
 
     // Try to authorize session using token
     AuthFailed := false;
-    if Token <> '' then
+    if (Token <> '') and InitializedUsers then
     begin
       SessionObject.Auth(Token);
       if SessionObject.UserId = '' then
@@ -348,18 +435,21 @@ begin
 
     // Execute command
     if not AuthFailed then
-      AResponseInfo.ContentText := TController.ExecuteNew(Controller, Method, Action, ARequestInfo.Params,
-        SessionObject);
+      if FRegisteredControllers.Contains(Controller) then
+        AResponseInfo.ContentText := TController.Execute(Self, Controller, Method, Action, ARequestInfo.Params,
+          SessionObject)
+      else
+        AResponseInfo.ContentText := Format('{"error":"controller_not_found","controller":"%s"}', [Controller]);
 
     // Commit DB transaction
-    if FFDManager <> nil then
+    if SessionObject.FDConnection <> nil then
       SessionObject.FDConnection.Commit;
 
   except
     on e: Exception do
     begin
       // Rollback DB transaction
-      if FDManager <> nil then
+      if SessionObject.FDConnection <> nil then
         SessionObject.FDConnection.Rollback;
 
       json := TJsonObject.Create;
@@ -411,10 +501,10 @@ begin
 
     // Parse controller, action, request params
     Token := Request.S['token'];
-    if Token <> '' then
+    if Token = '' then
     begin
-      Controller := Request.S['act'].Split(['/'])[0];
-      Action := Request.S['act'].Split(['/'])[1];
+      Controller := LowerCase(Request.S['act'].Split(['/'])[0]);
+      Action := LowerCase(Request.S['act'].Split(['/'])[1]);
     end;
     Method := 'GET';
     if Request.Contains('method') then
@@ -425,29 +515,35 @@ begin
         Params.Add(Request.Names[i] + '=' + Request.Values[Request.Names[i]].Value);
 
     // Start DB transaction
-    if FFDManager <> nil then
+    if SessionObject.FDConnection <> nil then
       SessionObject.FDConnection.StartTransaction;
 
-    if Token <> '' then
+    if (Token <> '') and InitializedUsers then
     begin
       // Try to authorize session using special action with token
       SessionObject.Auth(Token);
       if SessionObject.UserId = '' then
-        Response := '{"error":"auth_failed"}';
+        Response := '{"error":"auth_failed"}'
+      else
+        Response := Format('{"error":"auth_ok","userId":"%s"}', [SessionObject.UserId]);
     end
-    else
+
+    else if FRegisteredControllers.Contains(Controller) then
       // Execute command
-      Response := TController.ExecuteNew(Controller, Method, Action, Params, SessionObject);
+      Response := TController.Execute(Self, Controller, Method, Action, Params, SessionObject)
+      
+    else
+      Response := Format('{"error":"controller_not_found","controller":"%s"}', [Controller]);
 
     // Commit DB transaction
-    if FFDManager <> nil then
+    if SessionObject.FDConnection <> nil then
       SessionObject.FDConnection.Commit;
 
   except
     on e: Exception do
     begin
       // Rollback DB transaction
-      if FDManager <> nil then
+      if SessionObject.FDConnection <> nil then
         SessionObject.FDConnection.Rollback;
 
       json := TJsonObject.Create;
@@ -470,6 +566,7 @@ end;
 procedure TSimpleAPI.WSDisconnect(AContext: TIdContext);
 begin
   TSessionObject(AContext.Data).DisposeOf;
+  AContext.Data := nil;
 end;
 
 { TSessionObject }
@@ -479,7 +576,7 @@ begin
   FAPI := AAPI;
   FUserId := '';
 
-  if FAPI.FFDManager = nil then
+  if not FAPI.InitializedDB then
   begin
     // No DB mode
 
@@ -491,7 +588,7 @@ begin
     // Create FDConnection and FDQuery for request
 
     FFDConnection := TFDConnection.Create(nil);
-    FFDConnection.ConnectionDefName := 'default';
+    FFDConnection.ConnectionDefName := FAPI.ConnectionDef;
     FFDConnection.Connected := true;
 
     FFDQuery := TFDQuery.Create(nil);
@@ -503,7 +600,7 @@ procedure TSessionObject.DisposeOf;
 begin
   // Free FDConnection and FDQuery
 
-  if FAPI.FFDManager <> nil then
+  if FAPI.InitializedDB then
   begin
     FFDQuery.DisposeOf;
     FFDConnection.Connected := false;

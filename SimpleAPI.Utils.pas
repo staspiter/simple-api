@@ -59,6 +59,8 @@ function GetParamValue(sl: TStrings; const Name: string; out Exists: boolean): s
 
 function GenerateUniqueId: string;
 
+function CheckJsonObject(const JsonStr: string): TJsonObject;
+
 implementation
 
 function GenerateUniqueId: string;
@@ -69,6 +71,21 @@ begin
   SetLength(result, 32);
   StrLFmt(PChar(result), 32, '%.8x%.4x%.4x%.2x%.2x%.2x%.2x%.2x%.2x%.2x%.2x',
     [g.D1, g.D2, g.D3, g.D4[0], g.D4[1], g.D4[2], g.D4[3], g.D4[4], g.D4[5], g.D4[6], g.D4[7]]);
+end;
+
+function CheckJsonObject(const JsonStr: string): TJsonObject;
+var
+  Json: TJsonBaseObject;
+begin
+  result := nil;
+  try
+    Json := TJsonBaseObject.Parse(JsonStr);
+  finally
+    if (Json <> nil) and (Json is TJsonObject) then
+      result := TJsonObject(Json)
+    else if Json <> nil then
+      Json.DisposeOf;
+  end;
 end;
 
 function GetValueFromString(const s: string; TargetType: TRttiType; out InvalidParamValue: boolean): TValue;

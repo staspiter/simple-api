@@ -19,7 +19,7 @@
 		setInterval(
 			function() {
 				if (connected)
-			 		socket.send(JSON.stringify( { act: "WSTest/GetTimeAndRandomNumber" } ));
+			 		socket.send(JSON.stringify( { _act: "WSTest/GetTimeAndRandomNumber" } ));
 			}, 100);
 
 		socket.onopen = function() {

@@ -54,7 +54,7 @@ type
     function GetPhoneNumber: string;
 
     // *** List phone numbers of all users (available for authorized users only) ***
-    // *** Used custom action name "ListPhoneNumbers" instead default method name ***
+    // Used custom action name "ListPhoneNumbers" instead default method name
     // http://localhost:8082/first/GetPhoneNumber/<Token>?phone=123456
     [Action('ListPhoneNumbers')]
     function ListPhoneNumbersAction: string;
@@ -117,7 +117,7 @@ begin
   // Uncomment to use SSL certificate for your server
   //API.InitSSL('cert\certificate.crt', '', 'cert\private.key', 'cert\dhparam.pem');
 
-  // Set user object class
+  // Set session object class
   API.SessionObjectClass := TMySessionObject;
 
   // Init additional table to store phone numbers for every user

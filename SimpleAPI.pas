@@ -484,7 +484,10 @@ var
   c: TWebSocketIOHandlerHelper;
   SessionObject: TSessionObject;
   Request, json: TJsonObject;
+  JsonParamValue: TJsonDataValueHelper;
+  JsonParamValueStr: string;
   i: integer;
+  rid: string;
 begin
   c := TWebSocketIOHandlerHelper(AContext.Connection.IOHandler);
   c.CheckForDataOnSource(10);
@@ -495,32 +498,46 @@ begin
   if Msg = '' then
     exit;
   Request := nil;
+  Params := nil;
 
   try
     Request := TJsonObject(TJsonObject.Parse(Msg));
 
-    // Parse controller, action, request params
-    Token := Request.S['token'];
+    // Parse controller, action, rid, request params
+    Token := Request.S['_token'];
     if Token = '' then
     begin
-      Controller := LowerCase(Request.S['act'].Split(['/'])[0]);
-      Action := LowerCase(Request.S['act'].Split(['/'])[1]);
+      Controller := LowerCase(Request.S['_act'].Split(['/'])[0]);
+      Action := LowerCase(Request.S['_act'].Split(['/'])[1]);
     end;
     Method := 'GET';
-    if Request.Contains('method') then
-      Method := Request['method'];
+    if Request.Contains('_method') then
+      Method := Request['_method'];
+    rid := '';
+    if Request.Contains('_rid') then
+      rid := Request['_rid'];
     Params := TStringList.Create;
     for i := 0 to Request.Count - 1 do
-      if (Request.Names[i] <> 'act') and (Request.Names[i] <> 'method') and (Request.Names[i] <> 'token') then
-        Params.Add(Request.Names[i] + '=' + Request.Values[Request.Names[i]].Value);
+      if (Request.Names[i] <> '_act') and (Request.Names[i] <> '_method') and (Request.Names[i] <> '_token') and
+        (Request.Names[i] <> '_rid') then
+        begin
+          JsonParamValue := Request.Values[Request.Names[i]];
+          case JsonParamValue.Typ of
+            jdtArray: JsonParamValueStr := JsonParamValue.ArrayValue.ToJSON;
+            jdtObject: JsonParamValueStr := JsonParamValue.ObjectValue.ToJSON;
+            else
+              JsonParamValueStr := JsonParamValue.Value;
+          end;
+          Params.Add(Request.Names[i] + '=' + JsonParamValueStr);
+        end;
 
     // Start DB transaction
     if SessionObject.FDConnection <> nil then
       SessionObject.FDConnection.StartTransaction;
 
+    // Try to authorize session using special action with "token" field
     if (Token <> '') and InitializedUsers then
     begin
-      // Try to authorize session using special action with token
       SessionObject.Auth(Token);
       if SessionObject.UserId = '' then
         Response := '{"error":"auth_failed"}'
@@ -528,10 +545,11 @@ begin
         Response := Format('{"error":"auth_ok","userId":"%s"}', [SessionObject.UserId]);
     end
 
+    // Execute command
     else if FRegisteredControllers.Contains(Controller) then
-      // Execute command
       Response := TController.Execute(Self, Controller, Method, Action, Params, SessionObject)
-      
+
+    // Controller not found error
     else
       Response := Format('{"error":"controller_not_found","controller":"%s"}', [Controller]);
 
@@ -559,6 +577,18 @@ begin
 
   if Params <> nil then
     Params.DisposeOf;
+
+  // Try to add "rid" field to JsonObject response
+  if rid <> '' then
+  begin
+    json := CheckJsonObject(Response);
+    if json <> nil then
+    begin
+      json.S['_rid'] := rid;
+      Response := json.ToJSON;
+      json.DisposeOf;
+    end;
+  end;
 
   c.WriteString(Response);
 end;

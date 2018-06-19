@@ -1,0 +1,213 @@
+<html>
+<head>
+	<meta charset="utf-8">
+
+	<script src="jquery.min.js"></script>
+	<script src="sha256.min.js"></script>
+	<script src="notify.min.js"></script>
+
+	<style>
+		body {
+			margin: 0;
+			font-family: monospace;
+			font-size: 110%;
+		}
+
+		h1 {
+			margin-top: 30px;
+		}
+
+		.container {
+			width: 800px;
+			margin: 0 auto;
+		}
+
+		.forms {
+			display: grid;
+			grid-template-columns: 50% 50%;
+		}
+
+		.label {
+			display: inline-block;
+			width: 80px;
+			margin-right: 10px;
+		}
+
+		input {
+			margin-bottom: 10px;
+		}
+
+		.message {
+			background-color: #f9f9f9;
+			padding: 5px;
+			margin-top: 10px;
+			border: 3px solid #f9f9f9;
+		}
+
+		.message .text {
+			background-color: white;
+			padding: 5px;
+			margin: -5px;
+			margin-top: 5px;
+		}
+
+	</style>
+</head>
+<body>
+
+	<div class="container" id="connecting">
+		Connecting...
+	</div>
+
+	<div class="container" id="messenger" style="display: none;">
+
+		<h1>SimpleAPI: Messenger demo UI</h1>
+
+		<div class="forms">
+			<div class="authform">
+				<h3>Auth form</h3>
+				<span class="label">UserId</span><input type="text" id="name"><br>
+				<span class="label">Password</span><input type="text" id="password"><br>
+				<button id="login">Login</button>
+				<button id="logout">Logout</button>
+			</div>
+			<div class="authform">
+				<h3>Registration form</h3>
+				<span class="label">UserId</span><input type="text" id="register_name"><br>
+				<span class="label">Password</span><input type="text" id="register_password"><br>
+				<button id="register">Register</button>
+			</div>
+		</div>
+
+		<div class="room">
+			<h3>Current room</h3>
+			<input type="text" id="roomid" value="room">
+			<button id="change_room">Change room</button>
+		</div>
+
+		<div class="sendmessageform logged_in">
+			<h3 style="display: none;">You're logged in as <span id="current_login"></span></h3>
+			<h3>Send message</h3>
+			<input type="text" id="message_text" value="Hello" style="width: 50%;">
+			<button id="send_message">Send</button>
+		</div>
+
+		<div class="messages">
+
+		</div>
+	</div>
+
+	<script type="text/javascript">
+
+		var serverAddress = 'http://localhost:8080/',
+			token = '',
+			currentRoomId = '',
+			lastMessageTime = 0;
+
+		function register( userId, password ) {
+			$.get( serverAddress + 'users/create?userId=' + userId + '&passHashRequest=' + sha256(password),
+				function( data ) {
+					if (data == '{"answer":"user_added"}')
+						$.notify('User ' + userId + ' registered', "success");
+					if (data == '{"error":"userId_exists"}')
+						$.notify('User ' + userId + ' already exists', "error");
+					if (data == '{"error":"illegal_params"}')
+						$.notify('Illegal params', "error");
+				});
+		}
+
+		function auth( userId, password ) {
+
+			token = '';
+			$('#current_login').html('');
+			$('.logged_in').hide();
+
+			$.get( serverAddress + 'users/getToken?userId=' + userId + '&name=MessengerUI&passHashRequest=' + sha256(password),
+				function( data ) {
+					var jsonData = JSON.parse(data);
+
+					if (data == '{"error":"auth_failed"}')
+						$.notify('Auth failed', "error");
+					else if (data == '{"error":"illegal_params"}')
+						$.notify('Illegal params', "error");
+					else if (jsonData.token.length == 64) {
+						token = jsonData.token;
+						$('#current_login').html(userId);
+						$('.logged_in').show();
+						$.notify(userId + ' logged in', "success");
+					}
+				});
+		}
+
+		function send( message ) {
+			$.get( serverAddress + 'messages/send/' + token + '?roomId=' + currentRoomId + '&text=' + message);
+		}
+
+		function openRoom( roomId ) {
+			currentRoomId = roomId;
+			lastMessageTime = 0;
+			$('.messages').html('');
+		}
+
+		function getUpdates() {
+			if (currentRoomId == '')
+				return;
+
+			$.get( serverAddress + 'messages/get?roomId=' + currentRoomId + '&fromTime=' + lastMessageTime,
+				function( data ) {
+					$('#connecting').hide();
+					$('#messenger').show();
+
+					var jsonData = JSON.parse(data);
+					for (var i = jsonData.messages.length - 1; i >= 0; i--) {
+
+						var m = jsonData.messages[i];
+						var date = new Date(m.time * 1000);
+
+						if ($('#m_' + m.id).toArray().length == 0)
+							$('.messages').prepend('<div class="message" id="m_' + m.id + '">' + date.toLocaleTimeString() + ' - <b>' + m.userId + '</b><div class="text">' + m.message + '</div></div>');
+					}
+					if (jsonData.messages.length > 0)
+						lastMessageTime = jsonData.messages[0].time + 1;
+				});
+
+		}
+		setInterval(getUpdates, 300);
+
+		openRoom('room');
+
+		$('.logged_in').hide();
+
+		$('#change_room').click(function () {
+			openRoom($('#roomid').val());
+		});
+
+		$('#send_message').click(function () {
+			send($('#message_text').val());
+			$('#message_text').val('');
+		});
+
+		$('#message_text').keyup(function(e){
+			if(e.keyCode == 13)
+				$('#send_message').click();
+		});
+
+		$('#register').click(function () {
+			register($('#register_name').val(), $('#register_password').val());
+		});
+
+		$('#login').click(function () {
+			auth($('#name').val(), $('#password').val());
+		});
+
+		$('#logout').click(function () {
+			token = '';
+			$('#current_login').html('');
+			$('.logged_in').hide();
+			$.notify('You have logged out', "info");
+		});
+
+	</script>
+
+</body>
+</html>

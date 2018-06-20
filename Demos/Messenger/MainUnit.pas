@@ -35,7 +35,10 @@ begin
   // Every object of TSimpleAPI class is works like a parallel API with some specific port and type
   // There are two types of API: HTTP and WebSocket
   // For now we'll use HTTP
-  API := TSimpleAPI.Create(TServerMode.HTTP, 8080);
+  API := TSimpleAPI.Create(TServerMode.HTTP, 8085);
+
+  // Uncomment this to use SSL certificale
+  //API.InitSSL('cert\certificate.crt', '', 'cert\private.key', 'cert\dhparam.pem');
 
   // Initialize connection with PostgreSQL (it's just common FireDAC connection strings)
   API.InitDB([

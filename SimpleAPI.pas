@@ -54,12 +54,15 @@ type
     FIdServerIOHandlerSSLOpenSSL: TIdServerIOHandlerSSLOpenSSL;
     FHTTPServer: TIdHTTPServer;
     FWSServer: TWebSocketServer;
+    FSSLOnGetPassword: TFunc<string>;
 
     FSessionObjectClass: TSessionObjectClass;
 
     FRegisteredControllers: TList<string>;
 
     FUsersInitialized, FDBInitialized: boolean;
+
+    procedure SSLOnGetPassword(var Password: String);
 
     procedure HTTPConnect(AContext: TIdContext);
     procedure HTTPCommandGet(AContext: TIdContext; ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
@@ -83,7 +86,8 @@ type
     procedure InitDB(DBConnectionStrings: TStringList); overload;
     procedure InitDB(DBConnectionStrings: TArray<string>); overload;
     procedure InitUsers;
-    procedure InitSSL(CertFile, RootCertFile, KeyFile, DHParamsFile: string; Version: TIdSSLVersion = TIdSSLVersion.sslvTLSv1_2);
+    procedure InitSSL(CertFile, RootCertFile, KeyFile, DHParamsFile: string;
+      Version: TIdSSLVersion = TIdSSLVersion.sslvTLSv1_2; OnGetPassword: TFunc<string> = nil);
 
     procedure RegisterControllers(ControllersArr: TArray<TClass>);
 
@@ -286,7 +290,7 @@ begin
 end;
 
 procedure TSimpleAPI.InitSSL(CertFile, RootCertFile, KeyFile, DHParamsFile: string;
-  Version: TIdSSLVersion);
+  Version: TIdSSLVersion; OnGetPassword: TFunc<string>);
 begin
   if FIdServerIOHandlerSSLOpenSSL <> nil then
     raise Exception.Create('SSL was already initialized');
@@ -298,6 +302,7 @@ begin
   FIdServerIOHandlerSSLOpenSSL.SSLOptions.DHParamsFile := DHParamsFile;
   FIdServerIOHandlerSSLOpenSSL.SSLOptions.Method := Version;
   FIdServerIOHandlerSSLOpenSSL.SSLOptions.RootCertFile := RootCertFile;
+  FIdServerIOHandlerSSLOpenSSL.OnGetPassword := SSLOnGetPassword;
 
   case FServerMode of
     HTTP:
@@ -311,6 +316,13 @@ begin
         FWSServer.InitSSL(FIdServerIOHandlerSSLOpenSSL);
       end;
   end;
+end;
+
+procedure TSimpleAPI.SSLOnGetPassword(var Password: String);
+begin
+  Password := '';
+  if Assigned(FSSLOnGetPassword) then
+    Password := FSSLOnGetPassword;
 end;
 
 function TSimpleAPI.InitializedDB: boolean;

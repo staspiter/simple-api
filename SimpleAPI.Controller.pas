@@ -52,16 +52,16 @@ type
     FActions: TDictionary<string, TActionData>;
 
   private
-    FParams: TStrings;
+    FParams: TDictionary<string, string>;
     FSessionObject: TSessionObject;
     FAPI: TSimpleAPI;
 
   public
-    class function Execute(AAPI: TSimpleAPI; const AControllerName, AMethodName, AActionName: string; AParams: TStrings;
+    class function Execute(AAPI: TSimpleAPI; const AControllerName, AMethodName, AActionName: string; AParams: TDictionary<string, string>;
       ASessionObject: TSessionObject): string;
 
     property SessionObject: TSessionObject read FSessionObject;
-    property Params: TStrings read FParams;
+    property Params: TDictionary<string, string> read FParams;
     property API: TSimpleAPI read FAPI;
 
     constructor Create; virtual;
@@ -180,7 +180,7 @@ begin
 end;
 
 class function TController.Execute(AAPI: TSimpleAPI; const AControllerName, AMethodName, AActionName: string;
-  AParams: TStrings; ASessionObject: TSessionObject): string;
+  AParams: TDictionary<string, string>; ASessionObject: TSessionObject): string;
 var
   ActionId: string;
   c, c1: TController;
@@ -219,7 +219,10 @@ begin
   ParamNotFoundError := false;
   for p in ad.RttiMethod.GetParameters do
   begin
-    ParamValue := GetParamValue(AParams, p.Name, ParamValueExists);
+    ParamValueExists := AParams.ContainsKey(AnsiLowerCase(p.Name));
+    if ParamValueExists then
+      ParamValue := AParams[AnsiLowerCase(p.Name)];
+
     DefaultValueAttr := FindAttribute(p.GetAttributes, DefaultAttribute);
     if not ParamValueExists then
     begin

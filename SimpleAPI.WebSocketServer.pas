@@ -186,6 +186,13 @@ begin
     end;
     Mask[0] := ReadByte; Mask[1] := ReadByte; Mask[2] := ReadByte; Mask[3] := ReadByte;
 
+    // TODO: Bad fix
+    if DecodedSize < 1 then
+    begin
+      result := [];
+      exit;
+    end;
+
     SetLength(result, DecodedSize);
     inherited ReadBytes(TIdBytes(result), DecodedSize, False);
     for i := 0 to DecodedSize - 1 do

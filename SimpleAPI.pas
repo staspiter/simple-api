@@ -390,6 +390,7 @@ var
   Uri, Method, Controller, Action, Token: string;
   SplittedUri: TArray<string>;
   AuthFailed: boolean;
+  ParamsDict: TDictionary<string,string>;
 begin
   // UTF-8 UrlEncoded parameters fix
 
@@ -448,8 +449,11 @@ begin
     // Execute command
     if not AuthFailed then
       if FRegisteredControllers.Contains(Controller) then
-        AResponseInfo.ContentText := TController.Execute(Self, Controller, Method, Action, ARequestInfo.Params,
-          SessionObject)
+      begin
+        ParamsDict := StringParamsToDictionary(ARequestInfo.Params);
+        AResponseInfo.ContentText := TController.Execute(Self, Controller, Method, Action, ParamsDict, SessionObject);
+        ParamsDict.DisposeOf;
+      end
       else
         AResponseInfo.ContentText := Format('{"error":"controller_not_found","controller":"%s"}', [Controller]);
 
@@ -492,7 +496,7 @@ end;
 procedure TSimpleAPI.WSExecute(AContext: TIdContext);
 var
   Msg, Response, Controller, Action, Token, Method: string;
-  Params: TStringList;
+  Params: TDictionary<string, string>;
   c: TWebSocketIOHandlerHelper;
   SessionObject: TSessionObject;
   Request, json: TJsonObject;
@@ -516,6 +520,7 @@ begin
     Request := TJsonObject(TJsonObject.Parse(Msg));
 
     // Parse controller, action, rid, request params
+
     Token := Request.S['_token'];
     if Token = '' then
     begin
@@ -528,7 +533,8 @@ begin
     rid := '';
     if Request.Contains('_rid') then
       rid := Request['_rid'];
-    Params := TStringList.Create;
+
+    Params := TDictionary<string, string>.Create;
     for i := 0 to Request.Count - 1 do
       if (Request.Names[i] <> '_act') and (Request.Names[i] <> '_method') and (Request.Names[i] <> '_token') and
         (Request.Names[i] <> '_rid') then
@@ -540,7 +546,7 @@ begin
             else
               JsonParamValueStr := JsonParamValue.Value;
           end;
-          Params.Add(Request.Names[i] + '=' + JsonParamValueStr);
+          Params.AddOrSetValue(AnsiLowerCase(Request.Names[i]), JsonParamValueStr);
         end;
 
     // Start DB transaction

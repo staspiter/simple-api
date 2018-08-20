@@ -3,7 +3,7 @@ unit SimpleAPI.Utils;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Defaults, System.Rtti, JsonDataObjects;
+  System.SysUtils, System.Classes, System.Generics.Collections, System.Generics.Defaults, System.Rtti, JsonDataObjects;
 
 type
 
@@ -55,7 +55,7 @@ function FindAttribute(Attrs: TArray<TCustomAttribute>; AttrClass: TCustomAttrib
 
 function GetValueFromString(const s: string; TargetType: TRttiType; out InvalidParamValue: boolean): TValue;
 
-function GetParamValue(sl: TStrings; const Name: string; out Exists: boolean): string;
+function StringParamsToDictionary(s: TStrings): TDictionary<string, string>;
 
 function GenerateUniqueId: string;
 
@@ -86,6 +86,15 @@ begin
     else if Json <> nil then
       Json.DisposeOf;
   end;
+end;
+
+function StringParamsToDictionary(s: TStrings): TDictionary<string, string>;
+var
+  i: integer;
+begin
+  result := TDictionary<string, string>.Create;
+  for i := 0 to s.Count - 1 do
+    result.AddOrSetValue(AnsiLowerCase(s.Names[i]), s.ValueFromIndex[i]);
 end;
 
 function GetValueFromString(const s: string; TargetType: TRttiType; out InvalidParamValue: boolean): TValue;
@@ -131,30 +140,6 @@ begin
     end;
   except
     InvalidParamValue := true;
-  end;
-end;
-
-function GetParamValue(sl: TStrings; const Name: string; out Exists: boolean): string;
-var
-  i: integer;
-  s: string;
-  Splitted: TArray<string>;
-  LowerCasedName: string;
-begin
-  result := '';
-  Exists := false;
-  LowerCasedName := AnsiLowerCase(Name);
-  for i := 0 to sl.Count - 1 do
-  begin
-    s := sl[i];
-    Splitted := s.Split(['=']);
-    if Length(Splitted) < 2 then
-      continue;
-    if AnsiLowerCase(Splitted[0]) = LowerCasedName then
-    begin
-      Exists := true;
-      exit(Splitted[1]);
-    end;
   end;
 end;
 

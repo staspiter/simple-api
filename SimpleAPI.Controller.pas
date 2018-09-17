@@ -262,7 +262,13 @@ begin
     result := Format('{"error":"params_expected","params":"%s"}', [string.Join(',', ParamsNotFound)])
 
   else if ad.PublicAccess or (c1.FSessionObject.UserId <> '') or (not AAPI.InitializedUsers) then
-    result := ad.RttiMethod.Invoke(c1, Arguments).AsString
+  begin
+    TDBConnectionManager.Use(c1.FSessionObject.FDConnection);
+
+    result := ad.RttiMethod.Invoke(c1, Arguments).AsString;
+
+    TDBConnectionManager.Unuse;
+  end
 
   else
     result := '{"error":"auth_required"}';

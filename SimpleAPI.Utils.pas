@@ -3,9 +3,22 @@ unit SimpleAPI.Utils;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections, System.Generics.Defaults, System.Rtti, JsonDataObjects;
+  System.SysUtils, System.Classes, System.Generics.Collections, System.Generics.Defaults, System.Rtti, JsonDataObjects,
+  FireDAC.Comp.Client;
 
 type
+
+  TDBConnectionManager = class
+  private
+    class var FConnectionsByThreadIds: TDictionary<cardinal, TFDConnection>;
+    class constructor Create;
+    class destructor Destroy;
+  public
+    class procedure Use(c: TFDConnection);
+    class procedure Unuse;
+    class function Get: TFDConnection;
+    class function CreateQuery: TFDQuery;
+  end;
 
   TCharSet = set of Char;
 
@@ -199,6 +212,54 @@ begin
     if Json <> nil then
       Json.DisposeOf;
   end;
+end;
+
+{ TDBConnectionManager }
+
+class constructor TDBConnectionManager.Create;
+begin
+  FConnectionsByThreadIds := TDictionary<cardinal, TFDConnection>.Create;
+end;
+
+class destructor TDBConnectionManager.Destroy;
+begin
+  FConnectionsByThreadIds.DisposeOf;
+end;
+
+class function TDBConnectionManager.Get: TFDConnection;
+var
+  ThreadId: Cardinal;
+begin
+  ThreadId := TThread.CurrentThread.ThreadID;
+  result := nil;
+  if FConnectionsByThreadIds.ContainsKey(ThreadId) then
+    result := FConnectionsByThreadIds[ThreadId];
+end;
+
+class function TDBConnectionManager.CreateQuery: TFDQuery;
+var
+  c: TFDConnection;
+begin
+  result := nil;
+  c := Get;
+  if c = nil then
+    exit;
+  result := TFDQuery.Create(nil);
+  result.Connection := c;
+end;
+
+class procedure TDBConnectionManager.Use(c: TFDConnection);
+begin
+  FConnectionsByThreadIds.AddOrSetValue(TThread.CurrentThread.ThreadID, c);
+end;
+
+class procedure TDBConnectionManager.Unuse;
+var
+  ThreadId: Cardinal;
+begin
+  ThreadId := TThread.CurrentThread.ThreadID;
+  if FConnectionsByThreadIds.ContainsKey(ThreadId) then
+    FConnectionsByThreadIds.Remove(ThreadId);
 end;
 
 { TArrayHelper }

@@ -172,7 +172,7 @@ var
 begin
   sl := TStringList.Create;
   try
-    sl.LoadFromFile(Filename);
+    sl.LoadFromFile(Filename, TEncoding.UTF8);
     result := sl.Text;
   except
     result := '';

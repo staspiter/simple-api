@@ -405,14 +405,18 @@ begin
   if Uri.EndsWith('/') then
     Uri := Copy(Uri, 1, Length(Uri) - 1);
   SplittedUri := Uri.Split(['/']);
-  if Length(SplittedUri) < 3 then
+  if Length(SplittedUri) < 2 then
   begin
     AResponseInfo.ContentText := '{"error":"invalid_uri"}';
     exit;
   end;
   Method := UpperCase(ARequestInfo.Command);
   Controller := LowerCase(SplittedUri[1]);
-  Action := LowerCase(SplittedUri[2]);
+  if Length(SplittedUri) = 2 then
+    Action := 'default'
+  else
+    Action := SplittedUri[2];
+
   Token := '';
   if Length(SplittedUri) >= 4 then
   begin

@@ -28,6 +28,8 @@ type
     constructor Create(const AName: string = ''; const AMethod: string = 'GET');
   end;
 
+  ActionDefaultAttribute = class(TCustomAttribute);
+
   DefaultAttribute = class(TCustomAttribute)
   public
     FValue: string;
@@ -134,6 +136,7 @@ var
   i: integer;
   ActionAttr: ActionAttribute;
   PublicAccessAttr: PublicAccessAttribute;
+  ActionDefaultAttr: ActionDefaultAttribute;
   md: TActionData;
 begin
   result := '';
@@ -164,6 +167,7 @@ begin
 
     ActionAttr := ActionAttribute(FindAttribute(Attrs, ActionAttribute));
     PublicAccessAttr := PublicAccessAttribute(FindAttribute(Attrs, PublicAccessAttribute));
+    ActionDefaultAttr := ActionDefaultAttribute(FindAttribute(Attrs, ActionDefaultAttribute));
 
     if ActionAttr = nil then
       continue;
@@ -176,6 +180,9 @@ begin
       ActionName := LowerCase(md.RttiMethod.Name);
 
     FActions.Add(ControllerName + '_' + UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_' + ActionName, md);
+
+    if ActionDefaultAttr <> nil then
+      FActions.Add(ControllerName + '_' + UpperCase(ActionAttribute(Attrs[0]).FMethod) + '_default', md);
   end;
 end;
 

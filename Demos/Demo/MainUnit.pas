@@ -180,10 +180,10 @@ function TFirstController.SetPhoneNumber: string;
 begin
   // Validate phone number param
   // You can also get any parameters from "Params" field
-  if not CheckString([Params.Values['phone']], [3, 12], ['0'..'9', '+', '-', ' '])  then
+  if not CheckString([Params['phone']], [3, 12], ['0'..'9', '+', '-', ' '])  then
     exit('Phone number is incorrect');
 
-  TMySessionObject(SessionObject).PhoneNumber := Params.Values['phone'];
+  TMySessionObject(SessionObject).PhoneNumber := Params['phone'];
 
   result := 'Phone number was changed';
 end;

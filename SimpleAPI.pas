@@ -31,11 +31,13 @@ type
     FFDQuery: TFDQuery;
     FUserId: string;
     FHttpHeaders: TStringList;
+    FHttpContentType: string;
   public
     property UserId: string read FUserId;
     property FDConnection: TFDConnection read FFDConnection;
     property FDQuery: TFDQuery read FFDQuery;
     property HttpHeaders: TStringList read FHttpHeaders;
+    property HttpContentType: string read FHttpContentType write FHttpContentType;
 
     procedure Auth(const Token: string); virtual;
 
@@ -461,8 +463,12 @@ begin
 
         Answer := TController.Execute(Self, Controller, Method, Action, ParamsDict, SessionObject);
 
+        if SessionObject.FHttpContentType <> '' then
+          AResponseInfo.ContentType := SessionObject.FHttpContentType;
+
         for i := 0 to SessionObject.FHttpHeaders.Count - 1 do
           AResponseInfo.CustomHeaders.Add(SessionObject.FHttpHeaders[i]);
+
         AResponseInfo.ContentText := Answer;
         AResponseInfo.WriteContent;
 
@@ -637,6 +643,7 @@ constructor TSessionObject.Create(AAPI: TSimpleAPI);
 begin
   FAPI := AAPI;
   FUserId := '';
+  FHttpContentType := '';
   FHttpHeaders := TStringList.Create;
 
   if not FAPI.InitializedDB then

@@ -39,7 +39,7 @@ type
     // Where Token you can get from
     // http://localhost:8082/users/getToken?userId=<RegisteredUserId>&passHashRequest=<SHA256 of password>&name=<Token name, i.e. "test">
     // Where RegisteredUserId can be registered at
-    // http://localhost:8082/users/create?userId=<UserId>&passHash=<SHA256 of password>
+    // http://localhost:8082/users/create?userId=<UserId>&passHashRequest=<SHA256 of password>
     [Action]
     function Greetings: string;
 

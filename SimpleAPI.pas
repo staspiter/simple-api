@@ -30,10 +30,14 @@ type
     FFDConnection: TFDConnection;
     FFDQuery: TFDQuery;
     FUserId: string;
+    FHttpHeaders: TStringList;
+    FHttpContentType: string;
   public
     property UserId: string read FUserId;
     property FDConnection: TFDConnection read FFDConnection;
     property FDQuery: TFDQuery read FFDQuery;
+    property HttpHeaders: TStringList read FHttpHeaders;
+    property HttpContentType: string read FHttpContentType write FHttpContentType;
 
     procedure Auth(const Token: string); virtual;
 
@@ -387,10 +391,11 @@ procedure TSimpleAPI.HTTPCommandGet(AContext: TIdContext; ARequestInfo: TIdHTTPR
 var
   SessionObject: TSessionObject;
   json: TJsonObject;
-  Uri, Method, Controller, Action, Token: string;
+  Uri, Method, Controller, Action, Token, Answer: string;
   SplittedUri: TArray<string>;
   AuthFailed: boolean;
   ParamsDict: TDictionary<string,string>;
+  i: integer;
 begin
   // UTF-8 UrlEncoded parameters fix
 
@@ -455,7 +460,18 @@ begin
       if FRegisteredControllers.Contains(Controller) then
       begin
         ParamsDict := StringParamsToDictionary(ARequestInfo.Params);
-        AResponseInfo.ContentText := TController.Execute(Self, Controller, Method, Action, ParamsDict, SessionObject);
+
+        Answer := TController.Execute(Self, Controller, Method, Action, ParamsDict, SessionObject);
+
+        if SessionObject.FHttpContentType <> '' then
+          AResponseInfo.ContentType := SessionObject.FHttpContentType;
+
+        for i := 0 to SessionObject.FHttpHeaders.Count - 1 do
+          AResponseInfo.CustomHeaders.Add(SessionObject.FHttpHeaders[i]);
+
+        AResponseInfo.ContentText := Answer;
+        AResponseInfo.WriteContent;
+
         ParamsDict.DisposeOf;
       end
       else
@@ -627,6 +643,8 @@ constructor TSessionObject.Create(AAPI: TSimpleAPI);
 begin
   FAPI := AAPI;
   FUserId := '';
+  FHttpContentType := '';
+  FHttpHeaders := TStringList.Create;
 
   if not FAPI.InitializedDB then
   begin
@@ -658,6 +676,8 @@ begin
     FFDConnection.Connected := false;
     FFDConnection.DisposeOf;
   end;
+
+  FHttpHeaders.DisposeOf;
 
   inherited;
 end;
